@@ -1,0 +1,545 @@
+---
+title: "Analysis and Visualization of Toronto Building Permits"
+subtitle: "Exploring Building Permit Trends to Try and Source the Housing Affordability Crisis in Toronto: Insights from Open Data"
+author: 
+  - Gavin Crooks
+thanks: "Code and data are available at"
+date: today
+date-format: long
+abstract: "This paper analyzes Toronto’s building permit data to explore trends related to housing affordability in the Greater Toronto Area. Using spatial and temporal visualizations, the study examines permit issuance, construction timelines, and the creation of dwelling units. Key findings include the slow pace of new construction relative to population growth and significant variations in construction costs across postal codes. Ethical considerations around data privacy and consent are also discussed. The results highlight the challenges of addressing housing affordability in Toronto."
+format: html
+number-sections: true
+bibliography: references.bib
+---
+
+```{r setup}
+#| include: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(opendatatoronto)
+library(sf)
+library(viridis)
+library(gifski)
+library(lubridate)
+
+# Open data 
+rawdata <- read_csv("Inputs/rawdata.csv") # Closed permits from opendatatoronto - see script 01-download_data 
+rawdataopen <- read_csv("Inputs/rawdataopen.csv") # Open  permits from opendatatoronto - see script 01-download_data 
+postal_sf <- st_read("lfsa000b21a_e/lfsa000b21a_e.shp") # manually pulled from stats can 
+```
+
+
+# Introduction 
+
+As a young adult from the Greater Toronto Area(GTA), owning a home feels impossible. The house prices are highly unaffordable for most individuals, especially young people, as well as some of the highest rent prices in North America[@misc].  This motivated me to complete this analysis of building permits, specifically in Toronto. Using data from Opendatatoronto, I will create and analyze several visualizations to try and find insights into the unaffordability of housing in the GTA. This report does not try to make causal claims as a typical research paper, but rather, should describe patterns from building permit data about the city of Toronto.
+
+In this paper, I aim to visualize, analyze, and describe trends in the city of Toronto's building permit data. A number of interesting trends emerge, such as the fluctuation in the number of building permits issued over time, as well as patterns in construction costs by postal code. I explore these trends using a combination of spatial and temporal data visualizations. To complete this analysis, I use R, [@citeR], and a variety of packages, including [@opendatatoronto], [@sf], [@viridis], [@gifski], and [@lubridate]. This approach is inspired by the methods described in Data Visualization: A Practical Introduction by Kieran Healy @book and Telling Stories with Data by Rohan Alexander @tswd
+
+
+The remainder of this paper is structured as follows. @sec-data discusses the dataset used in the analysis, including its sources and key variables. @sec-ethics delves into the ethical considerations related to data collection and use, particularly focusing on privacy concerns and the potential impact of publicly accessible information. @sec-visualizations presents visualizations and discussions around the key insights from the data. Lastly, @sec-conclusion concludes with a reflection on the broader implications of the analysis. In @sec-appendix, a more broad discussion of the data is completed, specifically about this paper. The appendix also includes a brief data cleaning and data recoding explanation.  
+
+
+# Data {#sec-data}
+
+The data used in this paper comes from two sources, Opendatatoronto[@data] and Statistic Canada [@statscan]. The primary data source is Open Data Toronto, which provides detailed records on building permits issued and completed within the City of Toronto. The data has several key variables that will be used throughout this paper including Permit Type (e.g., new construction, demolition, renovation), Application date, Issued data, Completion Dates, Project Location (postal code, street address) and Estimated Construction costs. The data is collected from permit applications and updates made by City Staff when reviewing the application and Inspecting the work on the issued permit[@data]. It is important to note that two datasets are available from Opendatatoronto, one is closed or completed permits and the other is active or uncompleted permits. Both these datasets include the same variables and information. It is also important to note this data is openly available from the Opendatatoronto r package [@opendatatoronto] or the Opendatatornto website[@data]. For this paper, the data was obtained using the Opendatatoronto r package. The code used to obtain the data is available in the r script labelled 01_download_data. The raw data is also available in the inputs folder. 
+
+The second dataset is from Statistics Canada. This dataset was manually pulled from the Statistics Canada website. This dataset was used for creating the maps in this paper. Using the Forward Sortation Area (FSA), this data was merged with the building permits data set to provide the necessary shapefiles for mapping. The Forward Sortation Area Boundary File depicts the boundaries of FSAs derived from postal codes and captured from census questionnaires[@statscan]. It is important to note this data includes information copied with permission from Canada Post Corporation[@statscan]. All files manually downloaded from the Statistic Canada website are available in the folder lfsa000b21a_e.  
+
+# Ethics {#sec-ethics}
+
+When creating or using any dataset, it is important to discuss any ethical considerations involved in the collection, use and visualization of the data. The Toronto building permit data does have some personal information, specifically, location information including street, address and postal code information. For this paper, this data was only used for the creation of maps to visualize other data. The data does not contain personal information, other than the variable BUILDER_NAME which usually consists of a company name but occasionally is an individual's name. A large ethical concern is consent, when submitting for a permit applicants may not be fully aware that their information will be made publicly available. While the dataset is intended for transparency and urban planning purposes, individuals who submit permit applications might not have explicitly consented to the open publication of their names or detailed location data. The dataset also includes the variable DESCRIPTION which is supposed to be a description of work proposed in application. This usually consists of descriptions like "Interior alterations and build deck at rear," however, can include more specific details like "Change existing exhaust system to Gino's Pizza Restaurant*." The description variable is not used in this paper its presence in the dataset raises additional ethical considerations regarding privacy and data sensitivity. While most descriptions are general, some may contain business names, tenant details, or other information that could unintentionally reveal more than intended. This could pose privacy risks, especially for small businesses or residential projects where the data might be linked to individuals.
+
+There are limited ethical concerns regarding the Statistics Canada dataset in both its collection and its use in this paper. As a national statistical agency, Statistics Canada follows strict protocols for data collection, anonymization, and dissemination, ensuring that all published data comply with privacy regulations. Additionally, the dataset is used solely for mapping and visualization purposes, providing insights into broader trends rather than individual records.By ethically using this data, without misrepresenting or distorting the information, it upholds the principles of responsible data use, ensuring that any conclusions drawn accurately reflect regional patterns without compromising privacy or contributing to potential data misuse.
+
+# Visualizations {#sec-visualizations}
+In this section, several data visualizations are presented to explore key trends in the Toronto building permit data. These graphs provide insights into the spatial distribution of permits, changes in dwelling units created and lost, and construction costs across postal codes, helping to highlight important patterns and trends. 
+
+## Data Exploration 
+
+To first explore the data it seemed obvious to look at the type of permits the city has issued and closed. In @fig-permit-type-1 and @fig-permit-type-2, we can see that the majority of permits issued are small residential, plumbing, mechanical or building alterations or additions. The fifth most common permit type is new houses. This is both concerning and unsurprising at the same time. Since Toronto is already developed it is expected to not have a large number of new houses being built. Because of this using the relatively small number of new houses being built as a possible cause for the unaffordability is unreasonable. 
+```{r}
+#| label: fig-permit-type
+#| fig-cap: Bar plots of permit counts by type, including all permit types and focusing on those with over 2,000 permits.
+#| fig-subcap: ["All Permit Types", "Permit Types with More than 2,000 Permits"]
+#| layout-ncol: 2
+#| echo: false  
+#| warning: false
+
+# Summarize permit counts
+permit_counts <- rawdata %>%  
+  group_by(PERMIT_TYPE) %>%  
+  summarise(count = n())
+
+# Filter for permit types with more than 2,000 occurrences
+large_num_permits <- permit_counts %>%  
+  filter(count > 2000)
+
+# Plot all permit types
+ggplot(permit_counts, aes(x = reorder(PERMIT_TYPE, count), y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Number of Each Permit Type",
+       x = "Permit Type",
+       y = "Count") +
+  theme_minimal()
+
+# Plot permit types with over 2,000 occurrences
+ggplot(large_num_permits, aes(x = reorder(PERMIT_TYPE, count), y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Permit Types with More than 2,000 Permits",
+       x = "Permit Type",
+       y = "Count") +
+  theme_minimal()
+
+```
+
+In any time series data, it makes a lot of sense to graph it over time. To do this I chose the variable APPLICATION_DATE believing it would show several trends. The first trend I expected was an increase in applications over time, which can be seen in @fig-permits-time-1. However, I did not expect to see a large drop in applications in the past 10 years. Reviewing the dataset, I realized that this is likely a result of being the closed permit data. As a result, I obtained the open permit data and created the same graph in @fig-permits-time-2. However, instead of having more permits in recent years, it had fewer, which was an unexpected result. This does not make any sense and is likely an error in the data as the permits currently open in the city should be more recent than the closed permits. As a result of this, the remainder of the paper except for @fig-permits-month-2 presents an interesting contrast to the closed data. 
+
+```{r Permits Over Time}
+#| label: fig-permits-time
+#| fig-cap: Bar plots showing the number of building permits issued per year, for both closed and open permits.
+#| fig-subcap: ["Closed Permits Issued per Year", "Open Permits Issued per Year"]
+#| layout-ncol: 2
+#| echo: false
+#| warning: false
+
+permit_by_year <- rawdata %>%
+  mutate(application_year = year(APPLICATION_DATE)) %>%  
+  group_by(application_year) %>%
+  summarise(count = n()) 
+
+
+ggplot(permit_by_year, aes(x = application_year, y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Closed Permits Issued per Year",
+       x = "Year",
+       y = "Number of Permits") +
+  theme_minimal()
+
+# Same graph for open permits 
+
+# Yearly counts
+open_permit_by_year <- rawdataopen %>%
+  mutate(application_year = year(APPLICATION_DATE)) %>%
+  group_by(application_year) %>%
+  summarise(count = n())
+
+
+# Plot: Yearly Permits
+ggplot(open_permit_by_year, aes(x = application_year, y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Open Permits Issued per Year",
+       x = "Year",
+       y = "Number of Permits") +
+  theme_minimal()
+
+
+```
+
+Another trend I expected in the data was for there to be a large variation in which months the application data for the permits was. The largest number of permits in the closed data was for small residential projects. As a result, I expected the majority of applications to occur during the spring and summer months as this is when these projects would likely be completed. In @fig-permits-month-1, graphing the application date by month, we can see little variance between the months, again contradicting my expectation. This leads me to make the same graph using the open permits in @fig-permits-month-2. This followed the expectation of more permit applications being completed than in other seasons as expected and shows another interesting contrast between the closed and open permit data. 
+
+```{r Permits per month}
+#| label: fig-permits-month
+#| fig-cap: Bar plots showing the number of building permits issued per month, for both closed and open permits.
+#| fig-subcap: ["Closed Permits Issued per Month", "Open Permits Issued per Month"]
+#| layout-ncol: 2
+#| echo: false
+#| warning: false
+
+permit_by_month <- rawdata %>%
+  mutate(application_month = month(APPLICATION_DATE)) %>%  
+  group_by(application_month) %>%
+  summarise(count = n()) 
+
+# Relabel months to text for making graph
+permit_by_month <- permit_by_month %>% 
+  mutate(month_name = recode(as.character(application_month),
+    "1" = "January", "2" = "February", "3" = "March",
+    "4" = "April", "5" = "May", "6" = "June",
+    "7" = "July", "8" = "August", "9" = "September",
+    "10" = "October", "11" = "November", "12" = "December"
+  ))
+
+# put months in order for graph
+permit_by_month <- permit_by_month %>%
+  mutate(month_name = factor(month.name[application_month], levels = month.name)) #this fix was from chatgpt
+
+ggplot(permit_by_month, aes(x = month_name, y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Number of Permits Issued per Month", 
+       x = "Month",
+       y = "Number of Permits") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Repeat Code for open permits
+open_permit_by_month <- rawdataopen %>%
+  mutate(application_month = month(APPLICATION_DATE)) %>%
+  group_by(application_month) %>%
+  summarise(count = n())
+
+
+open_permit_by_month <- open_permit_by_month %>%
+  mutate(month_name = recode(as.character(application_month),
+    "1" = "January", "2" = "February", "3" = "March",
+    "4" = "April", "5" = "May", "6" = "June",
+    "7" = "July", "8" = "August", "9" = "September",
+    "10" = "October", "11" = "November", "12" = "December"
+  ))
+
+open_permit_by_month <- open_permit_by_month %>%
+  mutate(month_name = factor(month.name[application_month], levels = month.name))
+
+
+ggplot(open_permit_by_month, aes(x = month_name, y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Number of Permits Issued per Month",
+       x = "Month",
+       y = "Number of Permits") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+## Time to Complete Permits 
+
+As previously mentioned in the subsequent sections this paper will focus on the completed permits dataset. In the dataset, there are three important dates, the application date, the issued date and the completion date. A constant concern in construction whether a small residential project or large-scale condo building is time. These 3 variables all measure different aspects of construction time in Toronto. Specifically, with these variables, three new variables were calculated. The number of days to issue the permit is calculated by finding the difference between the application date and the issued date. The number of days to complete construction, the difference between the application date and completion date. Lastly, the number of days from being issued to complete. Upon creating these new variables and my initial intuition it made sense to create a histogram for each. In @fig-permit-timelines-1, @fig-permit-timelines-2 and @fig-permit-timelines-3, we can see the corresponding histograms. In @fig-permit-timelines-1 it is obvious that the majority of permits are approved in a very short amount of time, however, a small number of permits have taken over 6000 days to get approved. This is concerning as an increasing concern in the GTA and across Canada is the time it takes to obtain building permits. Investigating this further in the dataset several flaws appeared. For example, the permit with the longest days to approval of 6787 days, also took 6787 days to complete. Investigating further this is because both the issued date and completion date are the same. Several other permits also have the same problem, likely meaning an issue in the city's data. However, this is not true for all permits with a long approval time. It does make sense for a larger construction project to have a longer approval time and this is the result of most of the longer approval times. For example, a permit with the description "Proposal to construct a 37-storey mixed-use building containing 377 dwelling units, commercial at grade, 3 levels of below grade parking, 1 block of townhouses and 2 semi-detached houses at the north portion of the site," took over 5000 days to obtain approval. This makes sense as it is an extensive project but also concerning that even such a large project took so long to be approved. In @fig-permit-timelines-2 we see a very different distribution. The majority of projects take between 1000 and 5000 days to complete. This is also shocking as the largest portion of permits is for small residential projects, it would make sense for these projects to take a shorter amount of time to complete. Similarly, it is expected that large projects take several years to complete. However, with the variance in the type of project being undertaken, it makes sense for the distribution to be so large and have some resemblance to the normal distribution. In @fig-permit-timelines-3 we see a very similar distribution to @fig-permit-timelines-2. This means that the total days to complete, inclusive of waiting for application approval, is extremely similar to the time from the permit being issued to completion. This indicates that the approval process is not what is causing long construction times in Toronto, but the construction itself. This is an important insight, as mentioned many believe waiting for permits is a common cause of construction times, however, contrasting these graphs shows this is not the case. 
+
+```{r time to complete permits}
+#| label: fig-permit-timelines
+#| fig-cap: Histograms showing the distribution of time (in days) between various stages of the building permit process.
+#| fig-subcap: ["Application to Issued", "Application to Completion", "Issued to Completion"]
+#| layout-ncol: 3
+#| echo: false
+#| warning: false
+# Creating variable for different time periods between application, issued and completion data
+rawdata <- rawdata %>%
+  mutate(
+    days_to_issue = as.numeric(ISSUED_DATE - APPLICATION_DATE),      
+    days_to_complete = as.numeric(COMPLETED_DATE - APPLICATION_DATE), 
+    days_from_issue_to_complete = as.numeric(COMPLETED_DATE - ISSUED_DATE) 
+  )
+
+
+# days to issue graph 
+ggplot(rawdata, aes(x = days_to_issue)) +
+  geom_histogram(binwidth = 30, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of Time from Application to Issued",
+       x = "Days",
+       y = "Number of Permits") +
+  theme_minimal()
+
+# days to complete graph 
+ggplot(rawdata, aes(x = days_to_complete)) +
+  geom_histogram(binwidth = 30, fill = "green", color = "black") +
+  labs(title = "Distribution of Time from Application to Completion",
+       x = "Days",
+       y = "Number of Permits") +
+  theme_minimal()
+
+# days from issue to complete
+ggplot(rawdata, aes(x = days_from_issue_to_complete)) +
+  geom_histogram(binwidth = 30, fill = "orange", color = "black") +
+  labs(title = "Distribution of Time from Issued to Completion",
+       x = "Days",
+       y = "Number of Permits") +
+  theme_minimal()
+
+```
+
+After seeing the distributions for these different aspects of the permit timeline, it made sense to show them not only in a histogram but also in a boxplot(also for graphing variations). The boxplot can show the comparison between these groups in a more effective manner, allows us to see summary statistics quickly and illustrates the spreads and outliers more effectively. In @fig-boxplot we can see a number of aspects of the data that were described using the histograms. Firstly, we see how similar issued to completion and application to completion are, as their interquartile ranges and overall spread are about the same. We also see that their outliers are extremely similar. We also see that the application to issued time is extremely small, just with many outliers. An important aspect of this graph is it highlights that a few permits have a negative number of days between application and being issued. This obviously does not make any sense and again shows a minor flaw in the data, however, this is only for two permits, one of which was cancelled. 
+
+```{r boxplot}
+#| label: fig-boxplot
+#| fig-cap: Boxplot showing the distribution of time (in days) between various stages of the building permit process.
+#| layout-ncol: 1
+#| echo: false
+#| warning: false
+#| 
+# Reshape data to long format
+long_data <- rawdata %>% # chat gpt assisted in coverting to long_data
+  select(days_to_issue, days_to_complete, days_from_issue_to_complete) %>%
+  pivot_longer(cols = everything(), names_to = "time_category", values_to = "days")
+
+
+ggplot(long_data, aes(x = time_category, y = days, fill = time_category)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c(
+    "days_to_issue" = "Application to Issued",
+    "days_to_complete" = "Application to Completion",
+    "days_from_issue_to_complete" = "Issued to Completion"
+  )) + 
+  labs(
+    title = "Distribution of Permit Times",
+    x = "Permit Stage",
+    y = "Days"
+  ) + 
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1),
+    legend.position = "none"
+  )
+
+```
+
+Overall, the investigation into the application date, issued date and completion date brought many insights both to the process of building in Toronto and the data. Several flaws within the data were discovered and the belief that obtaining a building permit is a lengthy process was refuted. 
+
+## Dwelling Units 
+
+Although construction times are a useful metric to understand the high prices of shelter in the GTA, a more important factor is the number of livable units created by the construction. In the dataset, the variable DWELLING_UNITS_CREATED is the number of residential dwelling units created by the completion of permit work. DWELLING_UNITS_LOST is the number of residential dwelling units lost by completion of permit work. As the population of the GTA grows this may be a better measurement for the ability for people to live in Toronto and the GTA more broadly. So far in this report, a number of bar charts and histograms have been used. To diversify the types of visualizations used a cumulative line chart is used to show the changes in dwelling units gained, lost and a net value. In @fig-dwelling-cumulative we see that the number of dwelling units lost was relatively small. The number of dwelling units added was around 24,000 units. In the green, we have the net number of units added over this time around 23,000. This sounds like a large number of units, but according to (https://www.macrotrends.net/global-metrics/cities/20402/toronto/population) the population of Toronto grew by over 1 million people in the same period(2000-2015). With only a net gain of 24,000 units and this large of a population growth, it is easy to see why housing prices in Toronto have continued to sore. 
+```{r dwelling units}
+#| label: fig-dwelling-cumulative
+#| fig-cap: Cumulative number of dwelling units created and lost in Toronto from 2000 to 2015.
+#| layout-ncol: 1
+#| echo: false
+#| warning: false
+
+dwelling_cumulative <- rawdata %>%
+  mutate(
+    application_year = year(APPLICATION_DATE),
+    DWELLING_UNITS_CREATED = as.numeric(DWELLING_UNITS_CREATED),
+    DWELLING_UNITS_LOST = as.numeric(DWELLING_UNITS_LOST)
+  ) %>%
+  filter(application_year <= 2015) %>%
+  group_by(application_year) %>%
+  summarise(
+    created = sum(DWELLING_UNITS_CREATED, na.rm = TRUE),
+    lost = sum(DWELLING_UNITS_LOST, na.rm = TRUE),
+    .groups = "drop" # this debugging fix from chat GPT
+  ) %>%
+  mutate(
+    cum_created = cumsum(created),
+    cum_lost = cumsum(lost),
+    net = cum_created - cum_lost  
+  )
+
+# Plot
+ggplot(dwelling_cumulative, aes(x = application_year)) +
+  geom_line(aes(y = cum_created, color = "Dwelling Units Created"), size = 1.2) +
+  geom_line(aes(y = cum_lost, color = "Dwelling Units Lost"), size = 1.2) +
+  geom_line(aes(y = net, color = "Net Units Added"), size = 1.2) +  
+  scale_color_manual(
+    name = "Cumulative Totals",
+    values = c(
+      "Dwelling Units Created" = "blue",
+      "Dwelling Units Lost" = "red",
+      "Net Units Added" = "green"
+    )) +
+  labs(
+    x = "Year",
+    y = "Cumulative Count",
+    title = "Cumulative Dwelling Units Created, Lost, and Net Gain (2000-2015)"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+
+
+## Mapping
+In this section of this report, a number of maps are created using both the closed building permit data and the shape files obtained from Statistics Canada. To do so the datasets must be merged to connect the building permit data to the shape file. This was done by joining the shape files CFSAUID variable with the building permits POSTAL variable. In @fig-cost-map we can see a large variance in the amount of total estimated construction costs by postal code. Because of this large variance, a log scale was used to ensure the colour scale was able to show these differences. Two forward sortation areas had a total estimated construction cost of less than $500,000. However, other FSAs had single permits with estimated construction costs of over 100 million dollars. The permits with the largest amount of estimated construction costs had missing values for POSTAL and as a result, are not included in @fig-cost-map. Overall, a large variance between FSAs can be seen, unfortunately, it is difficult if this is a result of missing estimated construction costs data, postal code data or a result of investment into large projects in certain areas.  
+
+```{r cost map}
+#| label: fig-cost-map 
+#| fig-cap: Map showing the total estimated construction costs by FSA in Toronto, with color scale based on the log(estimated total cost). 
+#| layout-ncol: 1
+#| echo: false
+#| warning: false
+
+# Ensure CFSAUID and POSTAL are character types
+postal_sf <- postal_sf %>%
+  mutate(CFSAUID = as.character(CFSAUID))
+
+rawdata <- rawdata %>%
+  mutate(POSTAL = as.character(POSTAL),
+    EST_CONST_COST = as.numeric(EST_CONST_COST))
+
+# Filter postal_sf for Toronto-specific postal codes (FSA starts with 'M') - this was from chat gpt to only have toronto postal codes
+postal_sf_toronto <- postal_sf %>%
+  filter(substr(CFSAUID, 1, 1) == "M")  
+
+# Aggregate total construction cost by postal code
+aggregated_data <- rawdata %>%
+  filter(!is.na(EST_CONST_COST)) %>%
+  group_by(POSTAL) %>%
+  summarise(total_cost = sum(EST_CONST_COST), .groups = "drop")
+
+# Merge with Toronto postal shapefile and simplify geometry
+merged_data <- postal_sf_toronto %>%
+  left_join(aggregated_data, by = c("CFSAUID" = "POSTAL")) %>%
+  mutate(
+    total_cost = replace_na(total_cost, 0),
+    geometry = st_simplify(geometry, dTolerance = 250) # Simplify geometry to improve performance - my computer could not handle without this and from chat gpt
+  ) %>% st_as_sf()
+
+
+ggplot(merged_data) +
+  geom_sf(aes(fill = total_cost), color = "black", size = 0.2) +
+  scale_fill_viridis_c(
+    option = "magma", trans = "log", na.value = "grey90",
+    breaks = c(1e3, 1e4, 1e5, 1e6, 1e7, 1e8),
+    labels = c("1K", "10K", "100K", "1M", "10M", "100M")
+  ) +
+  labs(title = "Total Estimated Construction Costs by FSA", fill = "Total Construction Cost") +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+
+
+
+```
+
+A map of the number of applications by FSA seemed like an easy to compare and contrast with @fig-cost-map. @fig-app-map shows some interesting insights. Firstly, the FSAs with the lowest number of permit applications do not always have the smallest amount of estimated construction cost. The obvious exception is FSA, M4A, as in both @fig-cost-map and @fig-app-map it is extremely dark with only an estimated construction cost of $303,000 and a total of 30 permit applications. However, in the majority of other areas, there appears to be little to no correlation between the number of applications and estimated construction costs. This further supports the idea that a number of small permits have high estimated construction costs and heavily influenced @fig-cost-map. The opposite can be said for FSA, M2N, as it has the most number of applications just under 1000 but only had a total estimated construction cost of around 18 million dollars. Of course, 18 million dollars is a lot in estimated construction cost but compared to other FSAs this is relatively low. 
+
+It is important to note that in  @fig-cost-map and @fig-app-map, approximately 3000 permits within the dataset were missing values for the variable POSTAL and as a result are not included in either figure. This equates to around 10% of the dataset being removed from these figures. 
+
+```{r app map}
+#| label: fig-app-map  
+#| fig-cap: Map showing the number of building applications by postal code in Toronto, with color scale based on the number of applications.  
+#| layout-ncol: 1 
+#| echo: false 
+#| warning: false
+
+# Ensure POSTAL and CFSAUID are characters for joining
+postal_sf <- postal_sf %>% mutate(CFSAUID = as.character(CFSAUID))
+rawdata <- rawdata %>% mutate(POSTAL = as.character(POSTAL))
+
+# Merge raw data with postal shapefile and count applications per postal code
+merged_data <- rawdata %>%
+  left_join(postal_sf, by = c("POSTAL" = "CFSAUID")) %>%
+  group_by(POSTAL) %>%
+  summarise(Applications = n(), .groups = "drop")
+
+
+merged_data_simplified <- merged_data %>%
+  left_join(postal_sf %>% select(CFSAUID, geometry), by = c("POSTAL" = "CFSAUID")) %>%
+  st_as_sf() %>%  # Convert to sf object to preserve geometry - from chatgpt
+  mutate(geometry = st_simplify(geometry, dTolerance = 250))  # Simplify the geometry - r would terminate without
+
+merged_data_simplified <- merged_data_simplified %>%
+  filter(!is.na(POSTAL))
+
+ggplot(merged_data_simplified) +
+  geom_sf(aes(fill = Applications), color = "black", size = 0.2) +
+  scale_fill_viridis_c(
+    option = "magma", 
+    na.value = "grey90", 
+    breaks = seq(0, max(merged_data_simplified$Applications, na.rm = TRUE), by = 250)
+  ) +
+  theme_void() +
+  labs(title = "Number of Applications by Postal Code", fill = "Applications")
+
+```
+
+
+## Gifs 
+To drive home the point made in the maps, and to diversify the figures in this report, I decided to make @fig-cost-gif. This is the same map as in @fig-cost-map, however is a gif, showing the estimated construction costs by FSA for each year between 2000-2015. This shows several different aspects of the data and Toronto building permits. Firstly, we can see many FSAs that have missing data, frequently changing in the first few years. As time progresses the number of FSA's without any permits with an estimated construction cost decreases. This illustrates 2 possible trends, firstly, that more permits are created as time goes on. Or that the city's data collection has improved over time. The difference is difficult to identify and is likely a combination of both. @fig-cost-gif also allows us to see how different areas are developed over time as the FSA's with high estimated construction costs in the first few years are and the same as the FSA's with high estimated construction costs as years pass. Overall, @fig-cost-gif is not the most useful in terms of identifying trends in the data due to all the missing results and a map's inability to convey certain data. 
+
+```{r gif set up}
+#| echo: false 
+#| warning: false
+
+plotyrs <- seq(2000, 2015, by = 1)
+
+plot_list <- vector(mode = "list", length = length(plotyrs))
+
+fill_breaks <- c(1e3, 1e4, 1e5, 1e6, 1e7, 1e8)
+fill_labels <- c("1K", "10K", "100K", "1M", "10M", "100M")
+
+for (i in seq_along(plotyrs)) {
+  this_year <- plotyrs[i]  
+  
+  
+  year_data <- rawdata %>%
+    mutate(application_year = year(APPLICATION_DATE)) %>% 
+    filter(application_year == this_year) %>%  
+    left_join(postal_sf, by = c("POSTAL" = "CFSAUID")) %>%
+    group_by(POSTAL) %>%
+    summarise(total_cost = sum(EST_CONST_COST, na.rm = TRUE), .groups = "drop") %>%
+    filter(!is.na(total_cost) & total_cost > 0) 
+
+  year_data_sf <- year_data %>%
+    left_join(postal_sf %>% select(CFSAUID, geometry), by = c("POSTAL" = "CFSAUID")) %>%
+    st_as_sf() %>%
+    mutate(geometry = st_simplify(geometry, dTolerance = 250)) %>%
+    filter(!is.na(POSTAL))
+
+  plot_list[[i]] <- ggplot(year_data_sf) +
+    geom_sf(aes(fill = total_cost), color = "black", size = 0.2) +
+    scale_fill_viridis_c(
+      option = "magma",
+      trans = "log",
+      na.value = "grey90",
+      breaks = fill_breaks,
+      labels = fill_labels,
+      limits = c(min(fill_breaks), max(fill_breaks)),
+      oob = scales::squish
+    ) +
+    theme_void() +
+    labs(
+      title = paste("Construction Costs by FSA:", this_year),
+      fill = "Total Cost"
+    ) +
+    theme(
+      plot.title = element_text(size = 16, face = "bold"),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10)
+    )
+}
+
+
+```
+
+```{r gifs,animation.hook='gifski', interval = 3}
+#| label: fig-cost-gif
+#| fig-cap: Animated map showing the evolution of total estimated construction costs by postal code in Toronto from 2000 to 2015. Darker colors indicate lower costs (log scale).
+#| layout-ncol: 1
+#| echo: false
+#| warning: false
+#| animation.hook: gifski
+#| interval: 3
+
+for(i in 1:length(plot_list)) {
+  print(plot_list[[i]])  
+}
+
+```
+
+
+# Conclusion {#sec-conclusion} 
+
+This analysis of Toronto's building permit data provides valuable insights into the trends shaping housing in the city. While the overall number of permits issued has fluctuated over time, the slow creation of new dwelling units relative to Toronto's growing population underscores the difficulty in addressing the region's housing affordability crisis. The investigation also reveals discrepancies in permit approval and construction timelines, with a notable variance in the time taken for small residential projects and larger developments. Furthermore, a number of geographical trends were discussed through the use of map visualizations. 
+
+Despite the valuable insights gained, challenges related to data quality, such as missing or inaccurate entries, must be addressed for future analyses. Ultimately, the findings suggest that while building permits are a critical part of the housing puzzle, they alone are insufficient to explain the broader housing crisis in the Greater Toronto Area.
+
+
+# Appendix {#sec-appendix}
+
+## Discussion
+
+Well this was an insightful and interesting analysis of the building permits in Toronto, there were a number of flaws throughout. In this section, I will briefly discuss the benefits and issues of the data used in this paper. Firstly, the data before the year 2000 is not very accurate specifically for the variable APPLICATION DATE, as a result of a number of the data being processed on numerous pre-amalgamation legacy systems with varying data collection capabilities and standards. 
+
+Secondly, the dataset has a large number of missing values. This impacted essentially every figure as variables such as dwellings lost, estimated construction costs or postal code were missing. Now in a practical sense dwellings were not lost or gained from every permit, so this makes sense. An estimated construction cost not being reported for small residential projects also makes sense. However, missing postal codes were more problematic, as they hindered the spatial analysis and mapping, reducing the completeness of the geographic visualizations.
+
+Lastly, for reproducibility which is a major topic in @tswd, the data was obtained in @citeR using the package @opendatatoronto. This seems like the most reliable and reproducible way to obtain the data. However, as a result of the limitations of my machine, @citeR or @opendatatoronto, only 32,000 observations were obtained for both the closed and open permit data. This is a substantial amount but after further investigation, this is only a small subset of the data. For example, the open permit dataset as of April 4, 2025, consists of approximately 250,000 observations. This report and analysis would have been more robust had there been complete datasets. Having said that I do believe my computer would not have been able to complete a number of aspects in this report with the complete datasets as it struggled with the datasets that were used. I believe a complete analysis of the full dataset would be extremely beneficial and can be done in a reproducible manner. One benefit of not obtaining the full file manually off the website is that the data integrity was maintained which will be discussed in the data cleaning section. 
+
+## Data Cleaning
+
+Minimal data cleaning was needed for the dataset as every variable was coded in the correct form even including the dates, a common error. This is likely a result of obtaining the data directly from @opendatatoronto. As previously mentioned, missing values were the most consistent issue within the dataset. This is also reflected on the Opendatatoronto website as the data is rated very highly in terms of its quality, usability and metadata. 
+
+### Recoding 
+
+Although the data was very easy to use a number of small recoding instances occurred however they were all very straightforward. Exampled include extracting the month from application date or converting to a long data format to complete certain visualizations. 
+
