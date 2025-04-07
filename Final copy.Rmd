@@ -3,7 +3,7 @@ title: "Analysis and Visualization of Toronto Building Permits"
 subtitle: "Exploring Building Permit Trends to Try and Source the Housing Affordability Crisis in Toronto: Insights from Open Data"
 author: 
   - Gavin Crooks
-thanks: "Code and data are available at"
+thanks: "Code and data are available at https://github.com/Crooksyyy/Toronto-Building-Permits"
 date: today
 date-format: long
 abstract: "This paper analyzes Toronto’s building permit data to explore trends related to housing affordability in the Greater Toronto Area. Using spatial and temporal visualizations, the study examines permit issuance, construction timelines, and the creation of dwelling units. Key findings include the slow pace of new construction relative to population growth and significant variations in construction costs across postal codes. Ethical considerations around data privacy and consent are also discussed. The results highlight the challenges of addressing housing affordability in Toronto."
